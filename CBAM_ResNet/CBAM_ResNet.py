@@ -1,5 +1,11 @@
 """
 基于Res-50网络的OCT指纹防伪方法
+The OCT Fingerprint antifake methods that based on Res-50 Network
+You will learn about the achievement about:
+(1) Channel Attention
+(2) Space Attention
+(3) CBAM Model
+(4) ResNet50 + CBAM
 """
 from setting import nn,torch,F,test_envirment as tnt
 
@@ -119,7 +125,6 @@ class CBAM_ResNets(nn.Module):
         return out
         
 if __name__ == '__main__':
-    # 通道注意力测试
     data = torch.randn((tnt.batch_size,3,224,224)) # [batch_size,channel,width,height]
     cbam = CBAM_ResNets()
     output = cbam(data)

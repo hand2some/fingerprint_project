@@ -1,3 +1,11 @@
+"""
+The file is All project setting
+I provide two mode of envirment:
+(1) train
+(2) test
+In sometime,i need test my model through just one data,so i set the test data size on 1
+
+"""
 import numpy as np
 import pandas as pd
 import torch
