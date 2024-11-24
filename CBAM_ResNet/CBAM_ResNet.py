@@ -7,7 +7,10 @@ You will learn about the achievement about:
 (3) CBAM Model
 (4) ResNet50 + CBAM
 """
-from setting import nn, torch, F, test_envirment as tnt
+from setting import nn, torch, F, test_environment, train_environment, Adam, lr_scheduler
+from torch.nn import BCELoss
+from dataload import *
+from torch.utils.tensorboard import SummaryWriter
 
 
 class Channel_Attention(nn.Module):
@@ -88,12 +91,12 @@ class CBAM_ResNet_Element(nn.Module):
 
 
 class CBAM_ResNets(nn.Module):
-	def __init__(self):
+	def __init__(self, image_channel=1):
 		super(CBAM_ResNets, self).__init__()
 		self.block_list = [4, 3, 6, 3]
 		self.start_channel = 64
 
-		self.conv = nn.Conv2d(3, self.start_channel, kernel_size=7, stride=2, padding=4, bias=False)
+		self.conv = nn.Conv2d(image_channel, self.start_channel, kernel_size=7, stride=2, padding=4, bias=False)
 		self.maxPool = nn.MaxPool2d(3, stride=2)
 
 		self.layer1 = self._new_layer(64, self.block_list[0], stride=1)
@@ -127,10 +130,56 @@ class CBAM_ResNets(nn.Module):
 		return out
 
 
+def train_cbam_resnet(epochs=10):
+	if os.path.exists(cbam_model_path):
+		cbam_model.load_state_dict(torch.load(cbam_model_path))
+	cbam_model.train()
+	for epoch in range(epochs):
+		for i, (image, label) in enumerate(dataloader):
+			image = image.view(environment.batch_size, -1, 224, 224).float().to(environment.device)
+			label = label.view(environment.batch_size, -1).float().to(environment.device)
+			output = cbam_model(image)
+			loss = bce_criterion(output, label)
+			cbam_optimizer.zero_grad()
+			loss.backward()
+			cbam_optimizer.step()
+			cbam_scheduler.step(loss)
+			# 记录损失到 TensorBoard
+			writer.add_scalar('Loss/Train', loss.item(), epoch)
+
+			# 可选：记录模型权重的直方图
+			for name, param in cbam_model.named_parameters():
+				writer.add_scalar('Train Loss', loss.item(), epoch)
+				writer.flush()
+			if i == 0:
+				print("Epoch: {}, Loss: {}".format(epoch, loss.item()))
+		torch.save(cbam_model.state_dict(), cbam_model_path)
+
+
+def test_cbam_resnet():
+	cbam_model.eval()
+	if os.path.exists(cbam_model_path):
+		cbam_model.load_state_dict(torch.load(cbam_model_path))
+	for i, (image, label) in enumerate(dataloader):
+		image = image.view(environment.batch_size, -1, 224, 224).float().to(environment.device)
+		label = label.view(environment.batch_size, 1).float().to(environment.device)
+		output = cbam_model(image)
+		print(output)
+		if i == 3:
+			break
+
+
 if __name__ == '__main__':
-	data = torch.randn((tnt.batch_size, 3, 224, 224))  # [batch_size,channel,width,height]
-	cbam = CBAM_ResNets()
-	output = cbam(data)
-	# output = channel_attention(data)
-	# 空间注意力测试
-	print(output)
+	cbam_model_path = "./save/cbam.pth"
+	# environment = test_environment
+	environment = train_environment
+	dataset = ImageDataSet()
+	dataloader = DataLoader(dataset, batch_size=environment.batch_size, shuffle=True)
+	bce_criterion = BCELoss()
+	cbam_model = CBAM_ResNets().to(environment.device)
+	cbam_optimizer = Adam(cbam_model.parameters(), lr=environment.lr)  # optimizer
+	cbam_scheduler = lr_scheduler.ReduceLROnPlateau(cbam_optimizer, mode='min', factor=0.1, patience=10)
+	writer = SummaryWriter('logs/cbam')
+	train_cbam_resnet(5)
+	writer.close()
+	# test_cbam_resnet()

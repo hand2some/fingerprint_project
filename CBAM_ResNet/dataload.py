@@ -4,17 +4,16 @@ the step including:
 (1) read image
 (2) get window image
 (3) transform image
-(4) get the label of image, default is 1
+(4) get the label of image, default is [1,0]
 (5) let data to dataset
 (6) let dataset to dataloader
 """
 
 import numpy
-from torch.utils.data.dataset import T_co
 from torchvision import transforms
-from setting import np, pd, os
+from setting import np, pd, os,torch
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 
 # step 1
@@ -49,7 +48,7 @@ def get_window_img(gray_array: numpy.array, window_size=(224, 224), step=50):
 # step 3:the image data transform process
 transform = transforms.Compose([
 	transforms.ToTensor(),
-	transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+	transforms.Normalize(mean=[0.5], std=[0.5])
 ])
 
 
@@ -77,7 +76,7 @@ class ImageDataSet(Dataset):
 
 	def __getitem__(self, index):
 		img_data = self.data[index]
-		label = 1  # the default label of image is 1
+		label = torch.tensor([1, 0])  # the default label of image is [1,0]
 		if self.transform:
 			img_data = self.transform(img_data)
 		return img_data, label
