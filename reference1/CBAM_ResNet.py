@@ -8,7 +8,6 @@ You will learn about the achievement about:
 (4) ResNet50 + CBAM
 """
 from torch.utils.data import random_split
-
 from setting import nn, torch, F, test_environment, train_environment, Adam, lr_scheduler
 from torch.nn import BCELoss
 from dataload import *
@@ -54,11 +53,11 @@ class Space_Attention(nn.Module):
 		return F.sigmoid(pool_x)
 
 
-class CBAM_ResNet_Element(nn.Module):
+class Basic_ResNet_Element(nn.Module):
 	expansion = 4
 
 	def __init__(self, in_channel, out_channel, stride=1):
-		super(CBAM_ResNet_Element, self).__init__()
+		super(Basic_ResNet_Element, self).__init__()
 		# 基础残差网络Res-50
 		self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=1, bias=False)
 		self.bn1 = nn.BatchNorm2d(out_channel)
@@ -68,6 +67,21 @@ class CBAM_ResNet_Element(nn.Module):
 
 		self.conv3 = nn.Conv2d(out_channel, out_channel * self.expansion, kernel_size=1, bias=False)
 		self.bn3 = nn.BatchNorm2d(self.expansion * out_channel)
+
+	def forward(self, x):
+		out = F.relu(self.bn1(self.conv1(x)))
+		out = F.relu(self.bn2(self.conv2(out)))
+		out = self.bn3(self.conv3(out))
+		return out
+
+
+class CBAM_ResNet_Element(nn.Module):
+	expansion = 4
+
+	def __init__(self, in_channel, out_channel, stride=1):
+		super(CBAM_ResNet_Element, self).__init__()
+		# 基础残差网络Res-50
+		self.basic_resnet = Basic_ResNet_Element(in_channel, out_channel, stride)
 
 		# 通道注意力
 		self.channel_attention = Channel_Attention(self.expansion * out_channel)
@@ -81,9 +95,7 @@ class CBAM_ResNet_Element(nn.Module):
 			)
 
 	def forward(self, x):
-		out = F.relu(self.bn1(self.conv1(x)))
-		out = F.relu(self.bn2(self.conv2(out)))
-		out = self.bn3(self.conv3(out))
+		out = self.basic_resnet(x)
 		channel_score = self.channel_attention(out)
 		out = out * channel_score
 		space_score = self.space_attention(out)
@@ -149,11 +161,6 @@ def train_cbam_resnet(epochs=10):
 			cbam_scheduler.step(loss)
 			# 记录损失到 TensorBoard
 			writer.add_scalar('Loss/Train', loss.item(), epoch)
-
-			# 可选：记录模型权重的直方图
-			for name, param in cbam_model.named_parameters():
-				writer.add_scalar('Train Loss', loss.item(), epoch)
-				writer.flush()
 			if i == 0:
 				print("Epoch: {}, Loss: {}".format(epoch, loss.item()))
 		torch.save(cbam_model.state_dict(), cbam_model_path)
@@ -193,8 +200,8 @@ def test_cbam_resnet():
 
 if __name__ == '__main__':
 	cbam_model_path = "./save/cbam.pth"
-	environment = test_environment
-	# environment = train_environment
+	# environment = test_environment
+	environment = train_environment
 	dataset = ImageDataSet()
 	train_size = int(0.8 * len(dataset))
 	test_size = len(dataset) - train_size
@@ -207,6 +214,6 @@ if __name__ == '__main__':
 	cbam_scheduler = lr_scheduler.ReduceLROnPlateau(cbam_optimizer, mode='min', factor=0.1, patience=10)
 	print("start ...")
 	writer = SummaryWriter('logs/cbam')
-	# train_cbam_resnet(5)
+	train_cbam_resnet(5)
 	writer.close()
-	test_cbam_resnet()
+	# test_cbam_resnet()
