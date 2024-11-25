@@ -56,16 +56,16 @@ transform = transforms.Compose([
 class ImageDataSet(Dataset):
 	base_image_dir = '../data/A02-right-1-female-1'  # the basic directory path of images
 
-	def __init__(self, size=10, transform=None):
+	def __init__(self, nums=10, transform=None):
 		"""
 		the init function
-		:param size: the number of loading image
+		:param nums: the number of loading image
 		:param transform: the transform process of image
 		"""
 		super(ImageDataSet, self).__init__()
 		self.transform = transform
 		self.data = []
-		for i in range(1, size + 1):
+		for i in range(1, nums + 1):
 			gray_array = read_img(self.base_image_dir, i)
 			for window_img in get_window_img(gray_array):
 				self.data.append(window_img)

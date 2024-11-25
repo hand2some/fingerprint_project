@@ -7,9 +7,12 @@ You will learn about the achievement about:
 (3) CBAM Model
 (4) ResNet50 + CBAM
 """
+from torch.utils.data import random_split
+
 from setting import nn, torch, F, test_environment, train_environment, Adam, lr_scheduler
 from torch.nn import BCELoss
 from dataload import *
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -135,7 +138,7 @@ def train_cbam_resnet(epochs=10):
 		cbam_model.load_state_dict(torch.load(cbam_model_path))
 	cbam_model.train()
 	for epoch in range(epochs):
-		for i, (image, label) in enumerate(dataloader):
+		for i, (image, label) in enumerate(train_dataloader):
 			image = image.view(environment.batch_size, -1, 224, 224).float().to(environment.device)
 			label = label.view(environment.batch_size, -1).float().to(environment.device)
 			output = cbam_model(image)
@@ -158,28 +161,52 @@ def train_cbam_resnet(epochs=10):
 
 def test_cbam_resnet():
 	cbam_model.eval()
+	all_preds = []  # 存储所有预测的类别
+	all_labels = []  # 存储所有标签
 	if os.path.exists(cbam_model_path):
 		cbam_model.load_state_dict(torch.load(cbam_model_path))
-	for i, (image, label) in enumerate(dataloader):
+	for i, (image, label) in enumerate(test_dataloader):
 		image = image.view(environment.batch_size, -1, 224, 224).float().to(environment.device)
-		label = label.view(environment.batch_size, 1).float().to(environment.device)
+		label = label.view(environment.batch_size, -1).float().to(environment.device)
 		output = cbam_model(image)
-		print(output)
-		if i == 3:
-			break
+		preds = torch.argmax(output, dim=1)  # 预测标签
+		label = torch.argmax(label, dim=1)  # 真实标签
+		if environment.device == 'cuda':
+			all_preds.extend(preds.cpu().numpy())
+			all_labels.extend(label.cpu().numpy())
+		else:
+			all_preds.extend(preds.numpy())
+			all_labels.extend(label.numpy())
+
+	# 计算各类评价指标
+	accuracy = accuracy_score(all_labels, all_preds)
+	precision = precision_score(all_labels, all_preds, average='weighted')  # 'micro', 'macro', 'weighted'等
+	recall = recall_score(all_labels, all_preds, average='weighted')
+	f1 = f1_score(all_labels, all_preds, average='weighted')
+
+	# 打印评价指标
+	print(f'Accuracy: {accuracy:.4f}')
+	print(f'Precision: {precision:.4f}')
+	print(f'Recall: {recall:.4f}')
+	print(f'F1 Score: {f1:.4f}')
 
 
 if __name__ == '__main__':
 	cbam_model_path = "./save/cbam.pth"
-	# environment = test_environment
-	environment = train_environment
+	environment = test_environment
+	# environment = train_environment
 	dataset = ImageDataSet()
-	dataloader = DataLoader(dataset, batch_size=environment.batch_size, shuffle=True)
+	train_size = int(0.8 * len(dataset))
+	test_size = len(dataset) - train_size
+	train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+	train_dataloader = DataLoader(train_dataset, batch_size=environment.batch_size, shuffle=True, drop_last=True)
+	test_dataloader = DataLoader(test_dataset, batch_size=environment.batch_size, shuffle=True)
 	bce_criterion = BCELoss()
 	cbam_model = CBAM_ResNets().to(environment.device)
 	cbam_optimizer = Adam(cbam_model.parameters(), lr=environment.lr)  # optimizer
 	cbam_scheduler = lr_scheduler.ReduceLROnPlateau(cbam_optimizer, mode='min', factor=0.1, patience=10)
+	print("start ...")
 	writer = SummaryWriter('logs/cbam')
-	train_cbam_resnet(5)
+	# train_cbam_resnet(5)
 	writer.close()
-	# test_cbam_resnet()
+	test_cbam_resnet()
